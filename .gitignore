@@ -3,4 +3,7 @@
 *.bak
 *~
 
-# compiled 
+# compiled
+*.o
+bin
+build
