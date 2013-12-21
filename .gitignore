@@ -6,4 +6,6 @@
 # compiled
 *.o
 bin
-build
+build*
+.sconsign.dblite
+
