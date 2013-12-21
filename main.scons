@@ -1,0 +1,3 @@
+
+env =  Environment(CCFLAGS="-O3 -g -std=gnu11 -Wall", CC="clang")
+env.Program("fastDBarcode", Split("src/main.c src/match.c"), LIBS = 'z')
