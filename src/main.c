@@ -61,7 +61,7 @@ hamming_max                    (const char     *seq1,
  * ============================================================================
  */
 int
-print_usage ()
+print_usage                    ()
 {
     printf("fastDBarcode %s\n\n", FDB_VERSION);
     printf("USAGE:\n");
@@ -91,7 +91,8 @@ print_usage ()
  * =====================================================================================
  */
 barcode_t **
-parse_barcode_file (char *barcode_file, int *num)
+parse_barcode_file             (char           *barcode_file,
+                                int            *num)
 {
     int n_barcodes = 0;
     int alloced_barcodes = 4;
@@ -188,12 +189,13 @@ main (int argc, char *argv[])
                 flag |= FLG_VERBOSE;
                 break;
             case 'h':
-                printf("ok, have some help\n");
                 print_usage();
+                exit(EXIT_SUCCESS);
                 break;
             case '?':
                 fprintf(stderr, "Bad argument -%c\n", c);
-                return print_usage();
+                print_usage();
+                exit(EXIT_FAILURE);
         }
     }
     if (flag & FLG_VERBOSE) {
