@@ -56,7 +56,7 @@
 #define FDB_NONZIP_MODE "wT"
 
 #include "kseq.h"
-KSEQ_INIT(FDB_FP_TYPE, FDB_FP_READ);
+KSEQ_INIT(FDB_FP_TYPE, FDB_FP_READ)
 
 typedef struct __barcode_t {
     kstring_t *name;
