@@ -1,10 +1,8 @@
 # More structured C project, with src, include and build dirs
 CC=gcc
-CFLAGS=-g -O3 -I.
-OBJ=$(patsubst %.c,./obj/%.o,$(SRCS))
-PROG=<+PROG+>
-all: obj
-	$(CC) $(CFLAGS) $(OBJ) -o ./bin/$(PROG)
+CFLAGS=-g -O3 -Wall -Wpedantic -lz -std=gnu11
+PROG=fastDBarcode
 
-%.o : %.c
-	$(CC) $(CFLAGS)
+all:
+	mkdir -p ./build
+	$(CC) $(CFLAGS) -o ./build/$(PROG) ./src/main.c
