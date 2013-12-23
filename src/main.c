@@ -23,7 +23,9 @@
  * ===  FUNCTION  =============================================================
  *         Name:    hamming_max
  *  Description:    Calculates the hamming distance up until max. Useful for
- *                      non-exact substring finding
+ *                      non-exact substring finding.
+ *                  If mode is not HAMMING_FROMSTART, arguments must be of
+ *                      same length. Preprocessor deals with this.
  * Return Value:    size_t: max if max >= hamming dist, else hamming dist
  * ============================================================================
  */
@@ -34,9 +36,14 @@ hamming_max                    (const char     *seq1,
 {
     size_t len = strlen(seq1);
     /* check seq lengths */
-/*     if (len != strlen(seq2)) {
+
+#if FDB_HAMMING_MODE == HAMMING_ENFORCE_EQUAL_LEN
+/* Don't enforce same-length needle and haystack hamming distance. */
+    if (len != strlen(seq2)) {
         return(SIZE_MAX);
-    } */
+    }
+#endif
+
     if (strncmp(seq2, seq1, len) == 0){
         /* exact match */
         return 0;
