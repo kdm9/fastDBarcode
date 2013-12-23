@@ -149,7 +149,8 @@ parse_barcode_file             (char           *barcode_file,
  * =====================================================================================
  */
 int
-main (int argc, char *argv[])
+main                           (int             argc,
+                                char           *argv[])
 {
     int flag = 0;
     int max_barcode_mismatches = 1;
@@ -232,7 +233,9 @@ main (int argc, char *argv[])
             FDB_MEM_CHECK(infiles[infile_index]);
 
             infile_ptrs[infile_index] = FDB_FP_OPEN(infiles[infile_index], "r");
-            if (infile_ptrs[infile_index] == NULL) { FDB_IO_ERROR(infiles[infile_index]); }
+            if (infile_ptrs[infile_index] == NULL) {
+                FDB_IO_ERROR(infiles[infile_index]);
+            }
 
             infile_kseqs[infile_index] = kseq_init(infile_ptrs[infile_index]);
 
@@ -246,12 +249,13 @@ main (int argc, char *argv[])
     outfile_ptrs = calloc(n_infiles * n_barcodes, sizeof(*outfile_ptrs));
     for (int fff = 0; fff < n_infiles; fff++) {
         char *infile = strdup(infiles[fff]);
+        /* base/dirname have to work on a copy of str*/
         char *infile_base = strdup(basename(infile));
         char *infile_dir = strdup(dirname(infile));
         char *infile_ext = NULL;
         char *temp = NULL;
 
-        infile_base = basename(infile_base); /* has to work on a copy */
+        infile_base = basename(infile_base);
 /*         printf("the basename of %s is %s\n", infile, infile_base); */
         temp = strchr(infile_base, '.');
         if (temp != NULL) {
@@ -330,7 +334,7 @@ main (int argc, char *argv[])
                 FDB_FP_WRITE(outfile_ptrs[best_bcd], out_seq, out_len - 1);
             }
             if (flag & FLG_VERBOSE) {
-                printf("seq %s is from barcode %s with score of %zu\n\n%s\n",
+                printf("seq %s is from barcode %s with score of %zu\n\n%s\n\n",
                         seq->name.s, barcodes[best_bcd]->name->s, best_score,
                         out_seq);
             }
