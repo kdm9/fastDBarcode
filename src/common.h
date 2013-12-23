@@ -34,6 +34,7 @@
 #define FDB_FP_OPEN gzopen
 #define FDB_FP_CLOSE gzclose
 #define FDB_FP_WRITE gzwrite
+#define FDB_FP_ZIP_EXT "gz"
 
 #define FDB_MEM_ERROR \
     fprintf(stderr, "Memory Error: Could not allocate memorary at line %i in %s\n", \
@@ -52,7 +53,7 @@
 #define	FLG_VERBOSE 1 << 0
 #define	FLG_ZIPPED_OUT 1 << 1
 
-#define FDB_ZIP_MODE "wb9"
+#define FDB_ZIP_MODE "w9"
 #define FDB_NONZIP_MODE "wT"
 
 /* Don't enforce same-length needle and haystack hamming distance. */

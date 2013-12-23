@@ -192,6 +192,9 @@ main (int argc, char *argv[])
             case 'o':
                 out_dir = strdup(optarg);
                 break;
+            case 'z':
+                flag |= FLG_ZIPPED_OUT;
+                break;
             case 'v':
                 flag |= FLG_VERBOSE;
                 break;
@@ -214,7 +217,6 @@ main (int argc, char *argv[])
         barcode_file = strdup(argv[arg_index++]);
 
         barcodes = parse_barcode_file(barcode_file, &n_barcodes);
-
         n_infiles = argc - arg_index;
         infiles = calloc(n_infiles, sizeof(*infiles));
         FDB_MEM_CHECK(infiles);
@@ -261,17 +263,28 @@ main (int argc, char *argv[])
             infile_ext = strdup(temp + ext_offset + 1);
             free(temp);
         }
-/*         printf("the basename of %s is %s\next = %s\n", infile, infile_base, infile_ext); */
+        if (infile_ext != NULL && flag & FLG_ZIPPED_OUT) {
+            infile_ext = strcat(infile_ext, ".");
+            infile_ext = strcat(infile_ext, FDB_FP_ZIP_EXT);
+        }
+
+        /* printf("the basename of %s is %s\next = %s\n", 
+                infile, infile_base, infile_ext); */
         if (out_dir == NULL) {
             out_dir = strdup(infile_dir);
         }
         for (int bbb = 0; bbb < n_barcodes; bbb++) {
             int ooo = fff * n_barcodes + bbb;
             char temp2[2<<10] = "";
-            char * mode = (flag & FLG_ZIPPED_OUT)? FDB_ZIP_MODE: FDB_NONZIP_MODE;
-
-            snprintf(temp2, (2<<10)-1, "%s/%s_%s.%s", out_dir, infile_base,
-                    barcodes[bbb]->name->s, infile_ext);
+            char *mode = (flag & FLG_ZIPPED_OUT)? \
+                          FDB_ZIP_MODE: FDB_NONZIP_MODE;
+            if (infile_ext != NULL) {
+                snprintf(temp2, (2<<10)-1, "%s/%s_%s.%s", out_dir, infile_base,
+                        barcodes[bbb]->name->s, infile_ext);
+            } else {
+                snprintf(temp2, (2<<10)-1, "%s/%s_%s", out_dir, infile_base,
+                        barcodes[bbb]->name->s);
+            }
             outfiles[ooo] = strdup(temp2);
             outfile_ptrs[ooo] =  FDB_FP_OPEN(outfiles[ooo], mode);
             if (flag & FLG_VERBOSE) {
