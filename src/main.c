@@ -37,7 +37,7 @@ hamming_max                    (const char     *seq1,
     size_t len = strlen(seq1);
     /* check seq lengths */
 
-#if FDB_HAMMING_MODE == HAMMING_ENFORCE_EQUAL_LEN
+#ifndef FDB_HAMMING_MODE_FROMSTART
 /* Don't enforce same-length needle and haystack hamming distance. */
     if (len != strlen(seq2)) {
         return(SIZE_MAX);

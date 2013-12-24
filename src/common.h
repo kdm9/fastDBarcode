@@ -57,12 +57,7 @@
 #define FDB_NONZIP_MODE "wT"
 
 /* Don't enforce same-length needle and haystack hamming distance. */
-#define HAMMING_FROMSTART 0
-/* Or do */
-#define HAMMING_ENFORCE_EQUAL_LEN 1
-
-/* But don't actually =] */
-#define FDB_HAMMING_MODE HAMMING_FROMSTART
+#define FDB_HAMMING_MODE_FROMSTART
 
 #include "kseq.h"
 KSEQ_INIT(FDB_FP_TYPE, FDB_FP_READ)
