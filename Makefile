@@ -1,5 +1,6 @@
 CC=gcc
-CFLAGS=-g -O3 -Wall -Wpedantic -lz -std=gnu11
+DEBUG_FLAGS=-g -pg
+CFLAGS=$(DEBUG_FLAGS) -O3 -Wall -Wpedantic -lz -std=gnu11 -fopenmp
 PROG=fastDBarcode
 
 all:
