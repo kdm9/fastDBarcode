@@ -9,3 +9,4 @@ bin
 build*
 .sconsign.dblite
 plonk.txt
+gmon.out
