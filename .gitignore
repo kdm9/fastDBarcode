@@ -9,3 +9,7 @@ bin
 build*
 .sconsign.dblite
 plonk.txt
+
+*CMakeCache.txt
+*CMakeFiles
+*.cmake
