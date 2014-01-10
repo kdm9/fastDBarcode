@@ -1,3 +1,0 @@
-
-env =  Environment(CCFLAGS="-O3 -g -std=gnu11 -Wall -Wpedantic", CC="clang")
-env.Program("fastDBarcode", Split("src/main.c"), LIBS = 'z')
