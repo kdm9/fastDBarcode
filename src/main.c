@@ -103,8 +103,8 @@ barcode_t **
 parse_barcode_file             (char           *barcode_file,
                                 int            *num)
 {                                                                   /* {{{ */
-    int n_barcodes = 0;
-    int alloced_barcodes = 2;
+    size_t n_barcodes = 0;
+    size_t alloced_barcodes = 2;
     FDB_FP_TYPE fp = NULL;
     kseq_t * ksq = NULL;
     barcode_t **barcodes = calloc(alloced_barcodes, sizeof(*barcodes));
@@ -115,10 +115,11 @@ parse_barcode_file             (char           *barcode_file,
     while (kseq_read(ksq) >= 0) {
         if (ksq->seq.l)
         {
-            int iii = n_barcodes++;
-            if (n_barcodes >= alloced_barcodes) {
+            size_t iii = n_barcodes++;
+            /* != 0 below is to protect against int overflow */
+            if (n_barcodes >= alloced_barcodes && n_barcodes != 0) {
 #ifdef FDB_DEBUG
-                printf("reallocing barcodes: from %i to %i\n",
+                printf("reallocing barcodes: from %zu to %zu\n",
                         alloced_barcodes, alloced_barcodes <<1);
 #endif
                 alloced_barcodes = alloced_barcodes << 1;
@@ -140,13 +141,15 @@ parse_barcode_file             (char           *barcode_file,
         }
     }
 
+    /* we wan't the multiplication to wrap around to 0 below, as if it does
+     * length is > 2^64-1. */
     barcodes = realloc(barcodes, n_barcodes*sizeof(*barcodes));
     *num = n_barcodes;
 
     kseq_destroy(ksq);
     FDB_FP_CLOSE(fp);
     if (flag & FLG_VERBOSE) {
-        printf("Parsed %i barcodes from %s\n", n_barcodes, barcode_file);
+        printf("Parsed %zu barcodes from %s\n", n_barcodes, barcode_file);
     }
     return barcodes;
 } /* -----  end of function parse_barcode_file  ----- }}} */
