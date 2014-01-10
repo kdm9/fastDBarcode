@@ -16,3 +16,6 @@ link_directories(${fastDBarcode_BINARY_DIR}/lib)
 # Targets
 add_executable(fastDBarcode src/main.c)
 target_link_libraries(fastDBarcode z)
+
+
+INSTALL(TARGETS fastDBarcode DESTINATION "bin")
