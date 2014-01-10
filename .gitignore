@@ -10,3 +10,7 @@ build*
 .sconsign.dblite
 plonk.txt
 gmon.out
+
+*CMakeCache.txt
+*CMakeFiles
+*.cmake
