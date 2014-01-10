@@ -11,13 +11,15 @@
  *        License:  GPLv3+
  *       Compiler:  gcc
  *
- *         Author:  Kevin Murray, spam@kdmurray.id.au [include word penguin in subject]
+ *         Author:  Kevin Murray, spam@kdmurray.id.au
+ *                                [include word penguin in subject]
  *
  * ============================================================================
  */
 
 #include "common.h"
 
+#include <omp.h>
 
 static int flag = 0;
 
@@ -329,7 +331,27 @@ main                           (int             argc,
         printf("Processing %s:\t", infiles[fff]); fflush(stdout);
         reads_processed = 0;
         kseq_t *seq = infile_kseqs[fff];
-        while(kseq_read(seq) >= 0) {
+        #pragma omp parallel
+        {
+            kseq_t *this_seq = calloc(1, sizeof(*this_seq));
+
+            int tn = omp_get_thread_num();
+            int read_res = INT_MAX;
+            #pragma omp critical
+            {
+                printf("thread %i\n", tn);
+                read_res = kseq_read(seq);
+                this_seq->name.s = strdup(seq->name.s);
+                this_seq->name.l = seq->name.l;
+                this_seq->comment.s = strdup(seq->comment.s);
+                this_seq->comment.l = seq->comment.l;
+                this_seq->seq.s = strdup(seq->seq.s);
+                this_seq->seq.l = seq->seq.l;
+                this_seq->qual.s = strdup(seq->qual.s);
+                this_seq->qual.l = seq->qual.l;
+
+            }
+        while(read_res >= 0) {
             reads_processed++;
             size_t *scores = calloc(n_barcodes, sizeof(*scores));
             char *out_seq = NULL;
@@ -341,7 +363,7 @@ main                           (int             argc,
 
             for (int bbb = 0; bbb < n_barcodes; bbb++) {
                 barcode_t *bcd = barcodes[bbb];
-                scores[bbb] = hamming_max(bcd->seq->s, seq->seq.s,
+                scores[bbb] = hamming_max(bcd->seq->s, this_seq->seq.s,
                         max_barcode_mismatches + 1);
             }
             for (int bbb = 0; bbb < n_barcodes; bbb++){
@@ -350,7 +372,7 @@ main                           (int             argc,
                         barcodes[bbb]->seq->l); */
                 if (buffer_seq != NULL) {
                     size_t buffer_hamdist = hamming_max(buffer_seq,
-                            seq->seq.s + barcodes[bbb]->seq->l,
+                            this_seq->seq.s + barcodes[bbb]->seq->l,
                             max_buffer_mismatches + 1);
                     buffer_match = buffer_hamdist <= max_buffer_mismatches;
                     /* printf("bufseq %s, bdist %zu, match %i\n", buffer_seq,
@@ -371,24 +393,33 @@ main                           (int             argc,
                /* Extra length: @ + space + '+' 4*\n + \0 = 8
                  * -2 * best_bcd_len because we're removing barcode
                  */
-                out_len = seq->seq.l + seq->name.l + seq->qual.l + \
-                          seq->comment.l + 8 - 2 * best_bcd_len;
+                out_len = this_seq->seq.l + this_seq->name.l + this_seq->qual.l + \
+                          this_seq->comment.l + 8 - 2 * best_bcd_len;
                 out_seq = calloc(out_len, sizeof(*out_seq));
                 snprintf(out_seq, out_len, "@%s %s\n%s\n+\n%s\n",
-                        seq->name.s, seq->comment.s, seq->seq.s + best_bcd_len,
-                        seq->qual.s + best_bcd_len);
+                        this_seq->name.s, this_seq->comment.s,
+                        this_seq->seq.s + best_bcd_len,
+                        this_seq->qual.s + best_bcd_len);
                 /* out_len-1 because we don't want to write the \0, which it w*/
-                FDB_FP_WRITE(outfile_ptrs[best_bcd], out_seq, out_len - 1);
+                #pragma omp critical
+                {
+                    FDB_FP_WRITE(outfile_ptrs[best_bcd], out_seq, out_len - 1);
 
-                if (flag & FLG_VERBOSE) {
-                    printf("seq %s is from barcode %s with score of %zu\n\n%s\n\n",
-                            seq->name.s, barcodes[best_bcd]->name->s, best_score,
-                            out_seq);
+                    if (flag & FLG_VERBOSE) {
+                        printf("seq %s is from barcode %s with score of %zu\n\n%s\n\n",
+                                this_seq->name.s, barcodes[best_bcd]->name->s, best_score,
+                                out_seq);
+                    }
                 }
             }
             free(scores);
             free(out_seq);
             if (reads_processed % 1000000 == 0) { printf("."); fflush(stdout); }
+            #pragma omp critical
+            {
+                read_res = kseq_read(seq);
+            }
+        }
         }
         printf(" done!\n");
         if (flag & FLG_VERBOSE) {
