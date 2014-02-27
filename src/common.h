@@ -11,7 +11,7 @@
  *        License:  GPLv3+
  *       Compiler:  gcc
  *
- *         Author:  Kevin Murray, spam@kdmurray.id.au [include word penguin in subject]
+ *         Author:  Kevin Murray, spam@kdmurray.id.au
  *
  * ============================================================================
  */
@@ -28,6 +28,7 @@
 #include <unistd.h>
 #include <zlib.h>
 
+#define BREAK_EVERY_X_SEQS 1000000
 
 #define FDB_FP_TYPE gzFile
 #define FDB_FP_READ gzread
@@ -52,6 +53,7 @@
 
 #define	FLG_VERBOSE 1 << 0
 #define	FLG_ZIPPED_OUT 1 << 1
+#define	FLG_VERY_VERBOSE 1 << 2
 
 #define FDB_ZIP_MODE "w9"
 #define FDB_NONZIP_MODE "wT"
@@ -63,8 +65,11 @@
 KSEQ_INIT(FDB_FP_TYPE, FDB_FP_READ)
 
 typedef struct __barcode_t {
-    kstring_t *name;
-    kstring_t *seq;
+    kstring_t name;
+    kstring_t seq;
+    uint64_t count;
+    FDB_FP_TYPE *fps;
+    char **fns;
 } barcode_t;
 
 #endif /* COMMON_H */

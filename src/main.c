@@ -11,56 +11,15 @@
  *        License:  GPLv3+
  *       Compiler:  gcc
  *
- *         Author:  Kevin Murray, spam@kdmurray.id.au [include word penguin in subject]
+ *         Author:  Kevin Murray, spam@kdmurray.id.au
  *
  * ============================================================================
  */
 
 #include "common.h"
-
+#include "fdb.h"
 
 static int flag = 0;
-
-/*
- * ===  FUNCTION  =============================================================
- *         Name:    hamming_max
- *  Description:    Calculates the hamming distance up until max. Useful for
- *                      non-exact substring finding.
- *                  If mode is not HAMMING_FROMSTART, arguments must be of
- *                      same length. Preprocessor deals with this.
- * Return Value:    size_t: max if max >= hamming dist, else hamming dist
- * ============================================================================
- */
-inline static size_t
-hamming_max                    (const char     *seq1,
-                                const char     *seq2,
-                                size_t          max)
-{                                                                   /* {{{ */
-    size_t len = strlen(seq1);
-    /* check seq lengths */
-
-#ifndef FDB_HAMMING_MODE_FROMSTART
-/* Don't enforce same-length needle and haystack hamming distance. */
-    if (len != strlen(seq2)) {
-        return(SIZE_MAX);
-    }
-#endif
-
-    if (strncmp(seq2, seq1, len) == 0){
-        /* exact match */
-        return 0;
-    } else {
-        size_t mismatches = 0;
-        size_t iii = 0;
-        while(iii < len && mismatches < max) {
-            if (seq2[iii] != seq1[iii]) {
-                mismatches++;
-            }
-            iii++;
-        }
-        return mismatches;
-    }
-}                                                                   /* }}} */
 
 
 /*
@@ -83,6 +42,7 @@ print_usage                    ()
     printf("\t\t\tbuffer seq and sequences. [DEFAULT 0]\n");
     printf("\t-B BUFFER_SEQ\tSequence after the barcode to match.\n");
     printf("\t-s\t\tOutfile suffix. [DEFAULT barcode_id]\n");
+    printf("\t-l\t\tLeftover file suffix. [DEFAULT \"_leftover\"]\n");
     printf("\t-o\t\tOutput directory. [DEFAULT dirname(input) for each file]\n");
     printf("\t-z\t\tWrite output fastqs as zipped files.\n");
     printf("\t-v\t\tBe more verbose.\n");
@@ -90,69 +50,6 @@ print_usage                    ()
     return EXIT_SUCCESS;
 }                                                                   /* }}} */
 
-
-/*
- * ===  FUNCTION  =============================================================
- *         Name:  parse_barcode_file
- *  Description:  Parses a fasta file containing barcode sequences
- * Return Value:  barcode_t **:
- *                An array of pointers to barcode objects
- * ============================================================================
- */
-barcode_t **
-parse_barcode_file             (char           *barcode_file,
-                                int            *num)
-{                                                                   /* {{{ */
-    size_t n_barcodes = 0;
-    size_t alloced_barcodes = 2;
-    FDB_FP_TYPE fp = NULL;
-    kseq_t * ksq = NULL;
-    barcode_t **barcodes = calloc(alloced_barcodes, sizeof(*barcodes));
-
-
-    fp = FDB_FP_OPEN(barcode_file, "r");
-    ksq = kseq_init(fp);
-    while (kseq_read(ksq) >= 0) {
-        if (ksq->seq.l)
-        {
-            size_t iii = n_barcodes++;
-            /* != 0 below is to protect against int overflow */
-            if (n_barcodes >= alloced_barcodes && n_barcodes != 0) {
-#ifdef FDB_DEBUG
-                printf("reallocing barcodes: from %zu to %zu\n",
-                        alloced_barcodes, alloced_barcodes <<1);
-#endif
-                alloced_barcodes = alloced_barcodes << 1;
-                barcodes = realloc(barcodes, alloced_barcodes * sizeof(*barcodes));
-            }
-            if (flag & FLG_VERBOSE) {
-                printf("barcode %s is %s\n", ksq->name.s, ksq->seq.s);
-            }
-            barcode_t *barcode = calloc(1, sizeof(barcode_t));
-            barcode->name = calloc(1, sizeof(kstring_t));
-            barcode->seq = calloc(1, sizeof(kstring_t));
-            barcode->name->l = ksq->name.l;
-            barcode->name->m = ksq->name.m;
-            barcode->name->s = strdup(ksq->name.s);
-            barcode->seq->l = ksq->seq.l;
-            barcode->seq->m = ksq->seq.m;
-            barcode->seq->s = strdup(ksq->seq.s);
-            barcodes[iii] = barcode;
-        }
-    }
-
-    /* we wan't the multiplication to wrap around to 0 below, as if it does
-     * length is > 2^64-1. */
-    barcodes = realloc(barcodes, n_barcodes*sizeof(*barcodes));
-    *num = n_barcodes;
-
-    kseq_destroy(ksq);
-    FDB_FP_CLOSE(fp);
-    if (flag & FLG_VERBOSE) {
-        printf("Parsed %zu barcodes from %s\n", n_barcodes, barcode_file);
-    }
-    return barcodes;
-} /* -----  end of function parse_barcode_file  ----- }}} */
 
 
 /*
@@ -169,20 +66,18 @@ main                           (int             argc,
     int n_infiles = 0;
     int n_barcodes = 0;
     char **infiles = NULL;
-    FDB_FP_TYPE *infile_ptrs = NULL;
     kseq_t **infile_kseqs = NULL;
     char *buffer_seq = NULL;
     char *out_dir = NULL;
     char *out_suffix = NULL;
-    FDB_FP_TYPE *outfile_ptrs = NULL;
-    char **outfiles = NULL;
     char *barcode_file = NULL;
+    char *leftover_suffix = NULL;
     barcode_t **barcodes = NULL;
     size_t reads_processed = 0;
-
+    char *out_mode;
     /* Parse all arguments {{{ */
     char c;
-    while ((c = getopt(argc, argv, "hvzm:M:B:s:o:")) != -1) {
+    while ((c = getopt(argc, argv, "hvzm:M:B:s:o:l:")) != -1) {
         switch (c) {
             case 'm':
                 max_barcode_mismatches = atoi(optarg);
@@ -199,11 +94,19 @@ main                           (int             argc,
             case 'o':
                 out_dir = strdup(optarg);
                 break;
+            case 'l':
+                leftover_suffix = strdup(optarg);
+                break;
             case 'z':
                 flag |= FLG_ZIPPED_OUT;
                 break;
             case 'v':
-                flag |= FLG_VERBOSE;
+                if (! flag & FLG_VERBOSE) {
+                    flag |= FLG_VERBOSE;
+                }
+                else {
+                    flag |= FLG_VERY_VERBOSE;
+                }
                 break;
             case 'h':
                 print_usage();
@@ -218,32 +121,31 @@ main                           (int             argc,
     if (flag & FLG_VERBOSE) {
         printf("Being verbose.\n");
     }
-
     int arg_index = optind;
     if ((arg_index + 1) < argc) {
+        FDB_FP_TYPE infile_ptr;
         barcode_file = strdup(argv[arg_index++]);
 
-        barcodes = parse_barcode_file(barcode_file, &n_barcodes);
+        barcodes = parse_barcode_file(barcode_file, &n_barcodes, flag);
         n_infiles = argc - arg_index;
+
         infiles = calloc(n_infiles, sizeof(*infiles));
         FDB_MEM_CHECK(infiles);
 
-        infile_ptrs = calloc(n_infiles, sizeof(*infile_ptrs));
-        FDB_MEM_CHECK(infile_ptrs)
-
         infile_kseqs = calloc(n_infiles, sizeof(*infile_kseqs));
         FDB_MEM_CHECK(infile_kseqs);
+
 
         for (int infile_index = 0; infile_index < n_infiles; infile_index++) {
             infiles[infile_index] = strdup(argv[arg_index++]);
             FDB_MEM_CHECK(infiles[infile_index]);
 
-            infile_ptrs[infile_index] = FDB_FP_OPEN(infiles[infile_index], "r");
-            if (infile_ptrs[infile_index] == NULL) {
+            infile_ptr = FDB_FP_OPEN(infiles[infile_index], "r");
+            if (infile_ptr == NULL) {
                 FDB_IO_ERROR(infiles[infile_index]);
             }
 
-            infile_kseqs[infile_index] = kseq_init(infile_ptrs[infile_index]);
+            infile_kseqs[infile_index] = kseq_init(infile_ptr);
 
             if (flag & FLG_VERBOSE) {
                 printf("Using '%s' as an input file\n", infiles[infile_index]);
@@ -254,74 +156,56 @@ main                           (int             argc,
         print_usage();
         return EXIT_FAILURE;
     }
+    if (leftover_suffix == NULL) {
+        leftover_suffix = strdup("_leftover");
+    }
+    out_mode = (flag & FLG_ZIPPED_OUT)? FDB_ZIP_MODE: FDB_NONZIP_MODE;
     /* End of argument parsing }}} */
 
+    /* Setup input files {{{ */
+    char **infile_basenames = calloc(n_infiles, sizeof(*infile_basenames));
+    FDB_MEM_CHECK(infile_basenames);
+    char **infile_exts = calloc(n_infiles, sizeof(*infile_exts));
+    FDB_MEM_CHECK(infile_exts);
+    char **outfile_dirs = calloc(n_infiles, sizeof(*outfile_dirs));
+    FDB_MEM_CHECK(outfile_dirs);
+    FDB_FP_TYPE *leftover_outfps = calloc(n_infiles, sizeof(*leftover_outfps));
+    FDB_MEM_CHECK(leftover_outfps);
+
+    if (setup_input(infiles, n_infiles, out_dir, out_mode, leftover_suffix, flag,
+            infile_basenames, infile_exts, outfile_dirs, leftover_outfps)) {
+        fprintf(stderr, "[main] ERROR: could not setup input\n");
+        goto clean;
+    }
+
     /* Setup output files {{{ */
-    outfiles = calloc(n_infiles * n_barcodes, sizeof(*outfiles));
-    outfile_ptrs = calloc(n_infiles * n_barcodes, sizeof(*outfile_ptrs));
-    for (int fff = 0; fff < n_infiles; fff++) {
-        /* base/dirname have to work on a copy of str, it gets mangled*/
-        char *infile = strdup(infiles[fff]);
-        char *infile_base = strdup(basename(infile));
-        char *infile_dir = strdup(dirname(infile));
-        char *infile_ext = NULL;
-        char *temp = NULL;
-
-        /* restore infile to be a copy of the current input file */
-        free(infile);
-        infile = strdup(infiles[fff]);
-
-        infile_base = basename(infile_base);
-
-#ifdef  FDB_DEBUG
-        printf("the basename of %s is %s\n", infile, infile_base);
-#endif
-
-        temp = strchr(infile_base, '.');
-        if (temp != NULL) {
-            int ext_offset = temp - infile_base;
-            temp = strdup(infile_base);
-            temp[ext_offset] = '\0';
-            free(infile_base);
-            infile_base = strdup(temp);
-            infile_ext = strdup(temp + ext_offset + 1);
-            free(temp);
-        }
-        if (infile_ext != NULL && flag & FLG_ZIPPED_OUT) {
-            infile_ext = strcat(infile_ext, ".");
-            infile_ext = strcat(infile_ext, FDB_FP_ZIP_EXT);
-        }
-
-#ifdef  FDB_DEBUG
-        printf("the basename of %s is %s\next = %s\n",
-               infile, infile_base, infile_ext);
-#endif
-        if (out_dir == NULL) {
-            out_dir = strdup(infile_dir);
-        }
-        for (int bbb = 0; bbb < n_barcodes; bbb++) {
-            int ooo = fff * n_barcodes + bbb;
-            char temp2[2<<10] = "";
-            char *mode = (flag & FLG_ZIPPED_OUT)? \
-                          FDB_ZIP_MODE: FDB_NONZIP_MODE;
-            if (infile_ext != NULL) {
-                snprintf(temp2, (2<<10)-1, "%s/%s_%s.%s", out_dir, infile_base,
-                        barcodes[bbb]->name->s, infile_ext);
+    for (int bbb = 0; bbb < n_barcodes; bbb++) {
+        barcodes[bbb]->fps = calloc(n_infiles, sizeof(*barcodes[bbb]->fps));
+        barcodes[bbb]->fns = calloc(n_infiles, sizeof(*barcodes[bbb]->fns));
+        for (int fff = 0; fff < n_infiles; fff++) {
+            char temp2[2<<16];
+            if (infile_exts[fff] != NULL) {
+                snprintf(temp2, (2<<16), "%s/%s_%s.%s\0", outfile_dirs[fff],
+                        infile_basenames[fff], barcodes[bbb]->name.s,
+                        infile_exts[fff]);
             } else {
-                snprintf(temp2, (2<<10)-1, "%s/%s_%s", out_dir, infile_base,
-                        barcodes[bbb]->name->s);
+                snprintf(temp2, (2<<16), "%s/%s_%s\0", outfile_dirs[fff],
+                        infile_basenames[fff], barcodes[bbb]->name.s);
             }
-            outfiles[ooo] = strdup(temp2);
-            outfile_ptrs[ooo] =  FDB_FP_OPEN(outfiles[ooo], mode);
-            if (flag & FLG_VERBOSE) {
+            barcodes[bbb]->fns[fff] = strdup(temp2);
+            barcodes[bbb]->fps[fff] = FDB_FP_OPEN(barcodes[bbb]->fns[fff],
+                    out_mode);
+            if (barcodes[bbb]->fps[fff] == NULL) {
+                fprintf(stderr, "ERROR: Could not open output file '%s'\n",
+                        temp2);
+                exit(EXIT_FAILURE);
+            }
+            if (flag & FLG_VERY_VERBOSE) {
                 printf("outfile for %s with barcode %s is %s (bcd #%i)\n",
-                        infile, barcodes[bbb]->name->s, outfiles[ooo], ooo);
+                        barcodes[bbb]->fns[fff], barcodes[bbb]->name.s,
+                        barcodes[bbb]->fps[fff], bbb);
             }
         }
-        free(infile);
-        free(infile_base);
-        free(infile_dir);
-        free(infile_ext);
     } /* End of setup of output files }}} */
 
     /* Main Loop: for each file, split by barcode and write {{{ */
@@ -341,54 +225,73 @@ main                           (int             argc,
 
             for (int bbb = 0; bbb < n_barcodes; bbb++) {
                 barcode_t *bcd = barcodes[bbb];
-                scores[bbb] = hamming_max(bcd->seq->s, seq->seq.s,
+                scores[bbb] = hamming_max(bcd->seq.s, seq->seq.s,
                         max_barcode_mismatches + 1);
             }
             for (int bbb = 0; bbb < n_barcodes; bbb++){
-                /* printf("idx %i, bcd %s, score %zu, len %zu\n",
-                        bbb, barcodes[bbb]->name->s, scores[bbb],
-                        barcodes[bbb]->seq->l); */
                 if (buffer_seq != NULL) {
                     size_t buffer_hamdist = hamming_max(buffer_seq,
-                            seq->seq.s + barcodes[bbb]->seq->l,
+                            seq->seq.s + barcodes[bbb]->seq.l,
                             max_buffer_mismatches + 1);
                     buffer_match = buffer_hamdist <= max_buffer_mismatches;
-                    /* printf("bufseq %s, bdist %zu, match %i\n", buffer_seq,
-                            buffer_hamdist, buffer_match); */
                 } else {
                     /* if no buffer seq, always match */
                     buffer_match = 1;
                 }
                 if (scores[bbb] <= best_score && \
-                        barcodes[bbb]->seq->l >= best_bcd_len && \
+                        barcodes[bbb]->seq.l >= best_bcd_len && \
                         buffer_match) {
                     best_bcd = bbb;
-                    best_bcd_len = barcodes[bbb]->seq->l;
+                    best_bcd_len = barcodes[bbb]->seq.l;
                     best_score = scores[bbb];
                 }
-           }
+            }
+            FDB_FP_TYPE this_out_fp;
             if (best_score < max_barcode_mismatches) {
-               /* Extra length: @ + space + '+' 4*\n + \0 = 8
-                 * -2 * best_bcd_len because we're removing barcode
-                 */
-                out_len = seq->seq.l + seq->name.l + seq->qual.l + \
-                          seq->comment.l + 8 - 2 * best_bcd_len;
-                out_seq = calloc(out_len, sizeof(*out_seq));
-                snprintf(out_seq, out_len, "@%s %s\n%s\n+\n%s\n",
-                        seq->name.s, seq->comment.s, seq->seq.s + best_bcd_len,
-                        seq->qual.s + best_bcd_len);
-                /* out_len-1 because we don't want to write the \0, which it w*/
-                FDB_FP_WRITE(outfile_ptrs[best_bcd], out_seq, out_len - 1);
+                this_out_fp = barcodes[best_bcd]->fps[fff];
+                barcodes[best_bcd]->count++;
+            } else {
+                best_bcd_len = 0;
+                this_out_fp = leftover_outfps[fff];
+            }
+            /* Write out the barcode */
+            /* Extra length: @ + space + '+' 4*\n + \0 = 8
+             * -2 * best_bcd_len because we're removing barcode
+             */
+            out_len = seq->seq.l + seq->name.l + seq->qual.l + \
+                      seq->comment.l + 8 - (2 * best_bcd_len);
+            out_seq = calloc(out_len, sizeof(*out_seq));
+            //snprintf(out_seq, out_len, "@%s %s\n%s\n+\n%s\n",
+            snprintf(out_seq, out_len, "@%s %s\n%s\n+\n%s\n",
+                    seq->name.s, seq->comment.s, seq->seq.s + best_bcd_len,
+                    seq->qual.s + best_bcd_len);
+            /* Be verbose about things if we're aksed to */
+            if (flag & FLG_VERY_VERBOSE) {
+                if (best_score < max_barcode_mismatches) {
+                    printf("seq %s is from barcode %s with score of %zu.\n",
+                            seq->name.s, barcodes[best_bcd]->name.s,
+                            best_score);
+#ifdef FDB_DEBUG
+                    printf("%s\n\n", out_seq);
+#endif
 
-                if (flag & FLG_VERBOSE) {
-                    printf("seq %s is from barcode %s with score of %zu\n\n%s\n\n",
-                            seq->name.s, barcodes[best_bcd]->name->s, best_score,
-                            out_seq);
+                } else {
+                    printf("seq %s is from none of the barcodes.\n",
+                            seq->name.s);
+#ifdef FDB_DEBUG
+                    printf("%s\n\n", out_seq);
+#endif
                 }
             }
+            /* out_len-1 because we don't want to write the \0 */
+            FDB_FP_WRITE(this_out_fp, out_seq, out_len - 1);
+            /* Clean up */
             free(scores);
             free(out_seq);
-            if (reads_processed % 1000000 == 0) { printf("."); fflush(stdout); }
+            if (reads_processed % BREAK_EVERY_X_SEQS == 0) {
+                printf("."); fflush(stdout);
+                qsort((void*)barcodes, n_barcodes, sizeof(*barcodes), cmp_barcode_t_rev);
+            }
         }
         printf(" done!\n");
         if (flag & FLG_VERBOSE) {
@@ -397,22 +300,27 @@ main                           (int             argc,
         }
     } /*  End of main loop }}} */
 
+    if (flag & FLG_VERBOSE) {
+        printf("\n\n------------------------------------------------\n");
+        printf("[main] Summary of barcodes (reads from all input files):\n");
+        for (int ccc = 0; ccc<n_barcodes; ccc++) {
+            printf("%s: %d\n", barcodes[ccc]->name.s, barcodes[ccc]->count);
+        }
+    }
     /* Clean up everything that has been alloc'd {{{ */
+clean:
     if (infiles != NULL){
         for (int iii = 0; iii < n_infiles; iii++) {
             if (infiles[iii] != NULL) free(infiles[iii]);
         }
         free(infiles);
     }
-    if (infile_ptrs != NULL){
-        for (int iii = 0; iii < n_infiles; iii++) {
-            if (infile_ptrs[iii] != NULL) FDB_FP_CLOSE(infile_ptrs[iii]);
-        }
-        free(infile_ptrs);
-    }
     if (infile_kseqs != NULL){
         for (int iii = 0; iii < n_infiles; iii++) {
-            if (infile_kseqs[iii] != NULL) kseq_destroy(infile_kseqs[iii]);
+            if (infile_kseqs[iii] != NULL) {
+                FDB_FP_CLOSE(infile_kseqs[iii]->f->f);
+                kseq_destroy(infile_kseqs[iii]);
+            }
         }
         free(infile_kseqs);
     }
@@ -420,41 +328,36 @@ main                           (int             argc,
     if (buffer_seq != NULL) free(buffer_seq);
     if (out_dir != NULL) free(out_dir);
     if (out_suffix != NULL) free(out_suffix);
+    if (leftover_suffix != NULL) free(leftover_suffix);
     if (barcodes != NULL) {
         for (int iii = 0; iii < n_barcodes; iii++) {
             if (barcodes[iii] != NULL) {
-                if (barcodes[iii]->name != NULL) {
-                    if (barcodes[iii]->name->s != NULL) {
-                        free(barcodes[iii]->name->s);
-                    }
-                    free(barcodes[iii]->name);
+                if (barcodes[iii]->name.s != NULL) {
+                    free(barcodes[iii]->name.s);
                 }
-                if (barcodes[iii]->seq != NULL) {
-                    if (barcodes[iii]->seq->s != NULL) {
-                        free(barcodes[iii]->seq->s);
-                    }
-                    free(barcodes[iii]->seq);
+                if (barcodes[iii]->seq.s != NULL) {
+                    free(barcodes[iii]->seq.s);
                 }
-                free(barcodes[iii]);
+                for (int jjj = 0; jjj < n_infiles; jjj++) {
+                    if (barcodes[iii]->fns[jjj] != NULL) {
+                        free(barcodes[iii]->fns[jjj]);
+                    }
+                    if (barcodes[iii]->fps[jjj] != NULL) {
+                        FDB_FP_CLOSE(barcodes[iii]->fps[jjj]);
+                    }
+                }
+            free(barcodes[iii]);
             }
         }
         free(barcodes);
     }
-    if (outfiles != NULL) {
-        for (int iii = 0; iii < n_barcodes * n_infiles; iii++) {
-            if (outfiles[iii] != NULL) {
-                free(outfiles[iii]);
+    if (leftover_outfps != NULL) {
+        for (int iii = 0; iii <  n_infiles; iii++) {
+            if (leftover_outfps[iii] != NULL) {
+                FDB_FP_CLOSE(leftover_outfps[iii]);
             }
         }
-        free(outfiles);
-    }
-    if (outfile_ptrs != NULL) {
-        for (int iii = 0; iii < n_barcodes * n_infiles; iii++) {
-            if (outfile_ptrs[iii] != NULL) {
-                FDB_FP_CLOSE(outfile_ptrs[iii]);
-            }
-        }
-        free(outfile_ptrs);
+        free(leftover_outfps);
     }
     /* End of clean-up code }}}*/
 
