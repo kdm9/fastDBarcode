@@ -14,7 +14,7 @@ include_directories(${fastDBarcode_SOURCE_DIR}/src)
 link_directories(${fastDBarcode_BINARY_DIR}/lib)
 
 # Targets
-add_executable(fastDBarcode src/main.c)
+add_executable(fastDBarcode src/main.c src/fdb.c)
 target_link_libraries(fastDBarcode z)
 
 
