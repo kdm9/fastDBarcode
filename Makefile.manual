@@ -5,7 +5,7 @@ PROG=fastDBarcode
 
 all:
 	mkdir -p ./bin
-	$(CC) $(CFLAGS) -o ./bin/$(PROG) ./src/main.c
+	$(CC) $(CFLAGS) -o ./bin/$(PROG) ./src/main.c ./src/fdb.c
 
 clean:
 	rm -rvf ./bin
