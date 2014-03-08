@@ -13,9 +13,8 @@ add_definitions(-std=gnu99 -O3 -fgnu89-inline)
 include_directories(${fastDBarcode_SOURCE_DIR}/src)
 link_directories(${fastDBarcode_BINARY_DIR}/lib)
 
+add_subdirectory(test)
 # Targets
 add_executable(fastDBarcode src/main.c src/fdb.c)
 target_link_libraries(fastDBarcode z)
-
-
 INSTALL(TARGETS fastDBarcode DESTINATION "bin")
