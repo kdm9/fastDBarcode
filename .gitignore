@@ -6,6 +6,7 @@
 # compiled
 *.o
 bin
+tags
 build*
 .sconsign.dblite
 plonk.txt
