@@ -17,7 +17,7 @@ def run_fdb(exe, *args, **kwargs):
     proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
     return proc
 
-class TestFDBOutput(object):
+class TestFDBOutput(unittest.TestCase):
     def setUp(self):
         exe = argv[1]
         if path.exists(exe):
@@ -25,4 +25,4 @@ class TestFDBOutput(object):
 
 
 if __name__ == "__main__":
-    unitest.main()
+    unittest.main()
