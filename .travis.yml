@@ -1,0 +1,14 @@
+language: c
+
+install:
+ - git submodule update --init
+ - mkdir build
+ - mkdir target
+ - cd build
+
+script:
+ - cmake .. -DCMAKE_INSTALL_PREFIX=../target
+ - make
+ - make test
+ - make install
+ - test -f ../target/bin/fastDBarcode
